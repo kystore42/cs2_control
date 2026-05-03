@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>CS2 Trade Terminal</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="logo">CS2</div>
+                <div>
+                    <div class="title">322 Trade</div>
+                    <div class="subtitle">Material You Dashboard</div>
+                </div>
+            </div>
+            <div class="steam-input">
+                <label for="steam-id-input">SteamID</label>
+                <div class="steam-input-row">
+                    <input id="steam-id-input" type="text" placeholder="Введите SteamID (17 цифр)">
+                    <button id="apply-steam-id" class="btn">Применить</button>
+                </div>
+                <button id="open-profile" class="steam-account-row" type="button" aria-label="Открыть профиль Steam">
+                    <img id="account-avatar" class="steam-avatar" alt="avatar" src="">
+                    <div id="account-name" class="steam-account">Инвентарь: —</div>
+                </button>
+            </div>
+            <div class="top-actions">
+                <div id="status" class="status-pill">Готов к работе</div>
+                <button id="refresh-btn" class="btn primary">Обновить</button>
+                <button id="restart-btn" class="btn">Рестарт</button>
+                <button id="settings-btn" class="btn icon" aria-label="Настройки">⚙</button>
+            </div>
+        </header>
+
+        <div id="progress-line"></div>
+
+        <section class="summary">
+            <div class="summary-card">
+                <div class="label" title="Суммарная стоимость по Steam">Общая стоимость</div>
+                <div id="total-val" class="value">$0.00</div>
+                <div class="muted">Steam</div>
+            </div>
+            <div class="summary-card">
+                <div class="label" title="Суммарное количество предметов">Всего предметов</div>
+                <div id="total-items" class="value">0</div>
+                <div class="muted">Кол-во</div>
+            </div>
+            <div class="summary-card">
+                <div class="label" title="Профитные предметы">Сигналы</div>
+                <div id="signals-count" class="value">0</div>
+                <div class="muted">Профитные</div>
+            </div>
+        </section>
+
+        <div class="collapse" id="summary-more">
+            <button class="collapse-toggle" data-target="#summary-more">Развернуть метрики</button>
+            <div class="collapse-content">
+                <section class="summary">
+                    <div class="summary-card">
+                        <div class="label" title="Средний профит на предмет">Средний профит</div>
+                        <div id="avg-profit" class="value">$0.00</div>
+                        <div class="muted">На предмет</div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <section class="controls">
+            <div class="search">
+                <input id="search-input" type="text" placeholder="Поиск по названию...">
+            </div>
+            <div class="chips" role="group" aria-label="Сортировка">
+                <button class="chip active" data-sort="price">Цена</button>
+                <button class="chip" data-sort="profit">Профит</button>
+                <button class="chip" data-sort="count">Кол-во</button>
+            </div>
+        </section>
+
+        <section class="tabs">
+            <button class="tab-btn active" data-tab="inventory">Инвентарь</button>
+            <button class="tab-btn" data-tab="signals">Сигналы</button>
+            <button class="tab-btn" data-tab="analytics">Аналитика</button>
+            <div class="tabs-more">
+                <button id="more-btn" class="tab-btn">Ещё ▾</button>
+                <div id="more-menu" class="more-menu hidden">
+                    <button class="tab-btn" data-tab="watchlist">Избранное</button>
+                    <button class="tab-btn" data-tab="history">История</button>
+                    <button class="tab-btn" data-tab="ai">ИИ</button>
+                </div>
+            </div>
+        </section>
+
+        <div id="inventory-view" class="grid"></div>
+        <div id="signals-view" class="grid" style="display: none;"></div>
+        <div id="watchlist-view" class="grid" style="display: none;"></div>
+        <div id="history-view" class="panel" style="display: none;">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">Новые предметы</div>
+                    <div class="panel-subtitle">Обнаруженные с последнего скана</div>
+                </div>
+                <button id="clear-history" class="btn">Очистить</button>
+            </div>
+            <div id="history-list" class="history-list"></div>
+            <div id="history-empty" class="empty-state hidden">Пока нет новых предметов</div>
+            <div class="panel-divider"></div>
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">Инвентарь‑алерты</div>
+                    <div class="panel-subtitle">Предметы, которые исчезли</div>
+                </div>
+                <button id="clear-alerts" class="btn">Очистить</button>
+            </div>
+            <div id="alerts-list" class="history-list"></div>
+            <div id="alerts-empty" class="empty-state hidden">Нет пропавших предметов</div>
+            <div class="panel-divider"></div>
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">Ценовые алерты</div>
+                    <div class="panel-subtitle">Изменения цены и профита</div>
+                </div>
+                <button id="clear-price-alerts" class="btn">Очистить</button>
+            </div>
+            <div id="price-alerts-list" class="history-list"></div>
+            <div id="price-alerts-empty" class="empty-state hidden">Нет ценовых алертов</div>
+        </div>
+        <div id="analytics-view" class="panel" style="display: none;">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">Аналитика инвентаря</div>
+                    <div class="panel-subtitle">Сводка по стоимости и профиту</div>
+                </div>
+            </div>
+            <div class="analytics-grid">
+                <div class="summary-card">
+                    <div class="label">Профитные предметы</div>
+                    <div id="analytics-profitable" class="value">0</div>
+                    <div class="muted">шт.</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">Убыточные предметы</div>
+                    <div id="analytics-loss" class="value">0</div>
+                    <div class="muted">шт.</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">Топ профит</div>
+                    <div id="analytics-top-profit" class="value">$0.00</div>
+                    <div id="analytics-top-profit-name" class="muted">—</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">Топ убыток</div>
+                    <div id="analytics-top-loss" class="value">$0.00</div>
+                    <div id="analytics-top-loss-name" class="muted">—</div>
+                </div>
+            </div>
+            <div class="analytics-lists">
+                <div class="panel-block">
+                    <div class="panel-block-title">Топ по стоимости</div>
+                    <div id="analytics-top-value" class="list"></div>
+                </div>
+                <div class="panel-block">
+                    <div class="panel-block-title">Топ по профиту</div>
+                    <div id="analytics-top-profit-list" class="list"></div>
+                </div>
+                <div class="panel-block">
+                    <div class="panel-block-title">Анти‑топ по профиту</div>
+                    <div id="analytics-top-loss-list" class="list"></div>
+                </div>
+                <div class="panel-block">
+                    <div class="panel-block-title">Динамика профита</div>
+                    <div id="profit-sparkline" class="sparkline"></div>
+                </div>
+                <div class="panel-block">
+                    <div class="panel-block-title">Распределение по цене</div>
+                    <div id="price-distribution" class="bars"></div>
+                </div>
+                <div class="panel-block">
+                    <div class="panel-block-title">Топ категории</div>
+                    <div id="analytics-categories" class="list"></div>
+                </div>
+                <div class="panel-block">
+                    <div class="panel-block-title">ИИ рекомендации</div>
+                    <div class="ai-section">
+                        <div class="ai-subtitle">Продать / переложиться</div>
+                        <div id="ai-sell-list" class="list"></div>
+                    </div>
+                    <div class="ai-section">
+                        <div class="ai-subtitle">Купить/держать</div>
+                        <div id="ai-buy-list" class="list"></div>
+                    </div>
+                    <div id="ai-note" class="ai-note">Локальная модель на основе истории цен.</div>
+                </div>
+            </div>
+        </div>
+        <div id="ai-view" class="panel" style="display: none;">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">ИИ‑консультант</div>
+                    <div class="panel-subtitle">Оценка потенциала, трендов и простоя</div>
+                </div>
+            </div>
+            <div class="ai-grid">
+                <div class="ai-card">
+                    <div class="ai-card-title">Лучшие кандидаты на покупку</div>
+                    <div id="ai-top-buy" class="list"></div>
+                </div>
+                <div class="ai-card">
+                    <div class="ai-card-title">Кандидаты на продажу</div>
+                    <div id="ai-top-sell" class="list"></div>
+                </div>
+                <div class="ai-card">
+                    <div class="ai-card-title">Долгий простой</div>
+                    <div id="ai-idle" class="list"></div>
+                </div>
+            </div>
+            <div class="ai-market">
+                <div class="panel-header">
+                    <div>
+                        <div class="panel-title">ИИ по рынку CS2</div>
+                        <div class="panel-subtitle">Поиск выгодных позиций по всему рынку</div>
+                    </div>
+                    <button id="market-scan" class="btn">Скан рынка (200)</button>
+                </div>
+                <div class="ai-grid">
+                    <div class="ai-card">
+                        <div class="ai-card-title">Выгодно купить</div>
+                        <div id="market-buy" class="list"></div>
+                    </div>
+                    <div class="ai-card">
+                        <div class="ai-card-title">Переоценены</div>
+                        <div id="market-sell" class="list"></div>
+                    </div>
+                </div>
+                <div id="market-note" class="ai-note">Используется кэш Steam‑цен и ограниченный скан.</div>
+            </div>
+            <div class="ai-actions">
+                <div class="panel-header">
+                    <div>
+                        <div class="panel-title">Список действий</div>
+                        <div class="panel-subtitle">Быстрые действия “продать/купить”</div>
+                    </div>
+                </div>
+                <div class="ai-grid">
+                    <div class="ai-card">
+                        <div class="ai-card-title">К продаже</div>
+                        <div id="action-sell-list" class="list"></div>
+                    </div>
+                    <div class="ai-card">
+                        <div class="ai-card-title">К покупке</div>
+                        <div id="action-buy-list" class="list"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="ai-details">
+                <div class="ai-card">
+                    <div class="ai-card-title">Детальная оценка</div>
+                    <div id="ai-detail" class="ai-detail"></div>
+                </div>
+            </div>
+            <div id="ai-disclaimer" class="ai-note">Локальная аналитика на основе истории цен. Не является финансовой рекомендацией.</div>
+        </div>
+        <div id="settings-view" class="panel" style="display: none;">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">Настройки</div>
+                    <div class="panel-subtitle">Фильтры, приватность и обучение</div>
+                </div>
+            </div>
+            <div class="settings-grid">
+                <div class="panel-block">
+                    <div class="panel-block-title">Фильтры</div>
+                    <div class="filters">
+                        <div class="filter">
+                            <label for="min-profit">Мин. профит</label>
+                            <div class="range">
+                                <input id="min-profit" type="range" min="0" max="20" step="0.1" value="0.5">
+                                <span id="min-profit-val">$0.50</span>
+                            </div>
+                        </div>
+                        <div class="filter">
+                            <label for="group-mode">Группировка</label>
+                            <select id="group-mode" class="select">
+                                <option value="none">Без группировки</option>
+                                <option value="category">По категории</option>
+                            </select>
+                        </div>
+                        <label class="toggle">
+                            <input id="only-profit" type="checkbox">
+                            <span>Только прибыльные</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="panel-block">
+                    <div class="panel-block-title">Приватность и сохранённые данные</div>
+                    <div class="filters">
+                        <label class="toggle">
+                            <input id="incognito-toggle" type="checkbox">
+                            <span>Инкогнито</span>
+                        </label>
+                        <button id="offline-btn" class="btn">Показать сохранённые данные</button>
+                    </div>
+                </div>
+                <div class="panel-block">
+                    <div class="panel-block-title">ИИ‑фильтры</div>
+                    <div class="ai-controls">
+                        <div class="filter">
+                            <label for="ai-min-score">Мин. оценка</label>
+                            <div class="range">
+                                <input id="ai-min-score" type="range" min="-50" max="50" step="1" value="-10">
+                                <span id="ai-min-score-val">-10</span>
+                            </div>
+                        </div>
+                        <label class="toggle">
+                            <input id="ai-positive-trend" type="checkbox">
+                            <span>Только рост за 30д</span>
+                        </label>
+                        <div class="filter">
+                            <label for="ai-sort">Сортировка</label>
+                            <select id="ai-sort" class="select">
+                                <option value="score">Оценка</option>
+                                <option value="trend30">Тренд 30д</option>
+                                <option value="idle">Простой</option>
+                                <option value="profit">Профит</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel-block">
+                    <div class="panel-block-title">Алерты</div>
+                    <div class="filters">
+                        <div class="filter">
+                            <label for="alert-profit">Профит > $</label>
+                            <input id="alert-profit" type="number" min="0" step="0.1" value="2" class="select">
+                        </div>
+                        <div class="filter">
+                            <label for="alert-price-up">Рост цены > %</label>
+                            <input id="alert-price-up" type="number" min="0" step="0.1" value="5" class="select">
+                        </div>
+                        <div class="filter">
+                            <label for="alert-price-down">Падение цены > %</label>
+                            <input id="alert-price-down" type="number" min="0" step="0.1" value="5" class="select">
+                        </div>
+                    </div>
+                </div>
+                <div class="panel-block">
+                    <div class="panel-block-title">Обучение</div>
+                    <button id="start-onboarding" class="btn">Запустить обучение</button>
+                </div>
+            </div>
+        </div>
+        <div id="empty-state" class="empty-state hidden">Ничего не найдено</div>
+    </div>
+
+    <div id="onboarding" class="onboarding hidden" role="dialog" aria-modal="true">
+        <div class="onboarding-card">
+            <div id="onboarding-arrow" class="onboarding-arrow"></div>
+            <div id="onboarding-title" class="onboarding-title">Добро пожаловать</div>
+            <div id="onboarding-text" class="onboarding-text"></div>
+            <div class="onboarding-footer">
+                <div id="onboarding-step" class="onboarding-step">1/1</div>
+                <div class="onboarding-actions">
+                    <button id="onboarding-skip" class="btn">Пропустить</button>
+                    <button id="onboarding-prev" class="btn">Назад</button>
+                    <button id="onboarding-next" class="btn primary">Далее</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="detail-drawer" class="drawer hidden" role="dialog" aria-modal="true">
+        <div class="drawer-backdrop"></div>
+        <div class="drawer-panel">
+            <div class="drawer-header">
+                <div id="detail-title" class="drawer-title">—</div>
+                <button id="detail-close" class="btn icon" aria-label="Закрыть">✕</button>
+            </div>
+            <div class="drawer-content">
+                <div id="detail-tags" class="tag-row"></div>
+                <div id="detail-metrics" class="detail-metrics"></div>
+                <div id="detail-price-summary" class="detail-summary"></div>
+                <div class="panel-block">
+                    <div class="panel-block-title">История цены (Steam)</div>
+                    <div id="detail-sparkline" class="sparkline"></div>
+                </div>
+                <div class="panel-block">
+                    <div class="panel-block-title">ИИ‑оценка</div>
+                    <div id="detail-ai" class="detail-ai"></div>
+                </div>
+                <div class="panel-block">
+                    <div class="panel-block-title">Действия</div>
+                    <div class="detail-actions">
+                        <button id="detail-sell" class="btn">В список продаж</button>
+                        <button id="detail-buy" class="btn">В список покупок</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
