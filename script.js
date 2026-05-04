@@ -1,153 +1,43 @@
-const axios = require('axios');
+import axios from 'axios';
+import DataManager from './modules/DataManager.js';
+import StorageManager from './modules/StorageManager.js';
+import Logger from './modules/Logger.js';
 
-// --- НАСТРОЙКИ ---
+// --- CONSTANTS ---
 const DEFAULT_STEAM_ID = '76561198801899255';
-const SCAN_INTERVAL = 300000; // 5 минут (300 000 мс)
+const SCAN_INTERVAL = 300000; // 5 минут
 const CACHE_TIME = 15 * 60 * 1000; // Кэш цен на 15 минут
-const MIN_PROFIT_ALERT = 1.0; // Сумма профита (в $), при которой сработает звук
+const MIN_PROFIT_ALERT = 1.0;
 const DEFAULT_MIN_PROFIT = 0.5;
 const CONCURRENCY_LIMIT = 4;
 const PRICE_DELAY_MS = 80;
 
-let inventoryData = {};
-let currentSort = 'price';
-let nextScanTime = Date.now() + SCAN_INTERVAL;
-let isScanning = false;
-let lastScanCompletedAt = null;
-let currentTab = 'inventory';
-let searchQuery = '';
-let minProfitFilter = DEFAULT_MIN_PROFIT;
-let onlyProfit = false;
-let historyItems = [];
-let profitHistory = [];
-let isIncognito = false;
-let currentSteamId = DEFAULT_STEAM_ID;
-let watchlist = [];
-let alerts = [];
-let marketInsights = [];
-let aiMinScore = -10;
-let aiPositiveTrendOnly = false;
-let aiSort = 'score';
-let lastMarketPrices = null;
-let onboardingStep = 0;
-let groupMode = 'none';
-let collapsedGroups = {};
-let newItemNames = new Set();
-let missingNames = new Set();
-let currentDetailItem = null;
-let priceQueue = [];
-let priceQueueSet = new Set();
-let priceWorkerActive = false;
-let priceAlerts = [];
-let actionSellList = [];
-let actionBuyList = [];
-let alertProfitThreshold = 2;
-let alertUpPercent = 5;
-let alertDownPercent = 5;
-let steamRateLimitedUntil = 0;
+// --- INITIALIZATION ---
+const logger = new Logger({
+  logToConsole: true,
+  logToStorage: true,
+  isDev: process.argv.includes('--dev')
+});
 
-const HISTORY_KEY = 'inventory_history';
-const ASSET_SNAPSHOT_KEY = 'inventory_assets_snapshot';
-const INVENTORY_SNAPSHOT_KEY = 'inventory_snapshot';
-const PROFIT_HISTORY_KEY = 'profit_history';
-const INCOGNITO_KEY = 'incognito_mode';
-const STEAM_ID_KEY = 'steam_id';
-const WATCHLIST_KEY = 'watchlist_items';
-const ALERTS_KEY = 'inventory_alerts';
-const COUNT_SNAPSHOT_KEY = 'inventory_count_snapshot';
-const PRICE_HISTORY_KEY = 'price_history';
-const MARKET_INSIGHTS_KEY = 'market_insights';
-const ONBOARDING_KEY = 'onboarding_done';
-const NAME_ID_KEY = 'steam_nameid_cache';
-const GROUP_MODE_KEY = 'group_mode';
-const GROUP_COLLAPSE_KEY = 'group_collapsed';
-const PRICE_ALERTS_KEY = 'price_alerts';
-const ACTION_SELL_KEY = 'action_sell';
-const ACTION_BUY_KEY = 'action_buy';
-const ALERT_SETTINGS_KEY = 'alert_settings';
+const storage = new StorageManager(logger);
+const dataManager = new DataManager(storage, logger);
 
+// Load persisted data
+dataManager.loadFromStorage();
 
-function loadSteamId() {
-    try {
-        const saved = localStorage.getItem(STEAM_ID_KEY);
-        currentSteamId = saved && saved.trim() ? saved.trim() : DEFAULT_STEAM_ID;
-    } catch {
-        currentSteamId = DEFAULT_STEAM_ID;
-    }
+// --- UI UTILITIES ---
+
+function updateSteamIdDisplay() {
+    const steamInput = document.getElementById('steam-id-input');
+    if (!steamInput) return;
+
+    const isIncognito = dataManager.getIsIncognito();
+    const steamId = dataManager.getCurrentSteamId();
+    steamInput.type = isIncognito ? 'password' : 'text';
+    steamInput.value = steamId;
 }
 
-function saveSteamId() {
-    localStorage.setItem(STEAM_ID_KEY, currentSteamId);
-}
-
-function loadHistory() {
-    try {
-        const raw = localStorage.getItem(HISTORY_KEY);
-        historyItems = raw ? JSON.parse(raw) : [];
-    } catch {
-        historyItems = [];
-    }
-}
-
-function saveHistory() {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(historyItems.slice(0, 200)));
-}
-
-function getAssetSnapshot() {
-    try {
-        const raw = localStorage.getItem(ASSET_SNAPSHOT_KEY);
-        return raw ? JSON.parse(raw) : [];
-    } catch {
-        return [];
-    }
-}
-
-function saveAssetSnapshot(assetIds) {
-    localStorage.setItem(ASSET_SNAPSHOT_KEY, JSON.stringify(assetIds));
-}
-
-function saveInventorySnapshot(snapshot) {
-    localStorage.setItem(INVENTORY_SNAPSHOT_KEY, JSON.stringify(snapshot));
-}
-
-function loadWatchlist() {
-    try {
-        const raw = localStorage.getItem(WATCHLIST_KEY);
-        watchlist = raw ? JSON.parse(raw) : [];
-    } catch {
-        watchlist = [];
-    }
-}
-
-function saveWatchlist() {
-    localStorage.setItem(WATCHLIST_KEY, JSON.stringify(watchlist));
-}
-
-function loadAlerts() {
-    try {
-        const raw = localStorage.getItem(ALERTS_KEY);
-        alerts = raw ? JSON.parse(raw) : [];
-    } catch {
-        alerts = [];
-    }
-}
-
-function saveAlerts() {
-    localStorage.setItem(ALERTS_KEY, JSON.stringify(alerts.slice(0, 200)));
-}
-
-function loadMarketInsights() {
-    try {
-        const raw = localStorage.getItem(MARKET_INSIGHTS_KEY);
-        marketInsights = raw ? JSON.parse(raw) : [];
-    } catch {
-        marketInsights = [];
-    }
-}
-
-function saveMarketInsights() {
-    localStorage.setItem(MARKET_INSIGHTS_KEY, JSON.stringify(marketInsights.slice(0, 200)));
-}
+// --- PRICE CACHING & HELPERS ---
 
 function getCachedSteamData(hashName) {
     try {
@@ -164,27 +54,16 @@ function isCacheFresh(timestamp) {
     return (Date.now() - timestamp) < CACHE_TIME;
 }
 
-function isSteamRateLimited() {
-    return Date.now() < steamRateLimitedUntil;
-}
-
-function setSteamRateLimited(minutes = 2) {
-    steamRateLimitedUntil = Date.now() + minutes * 60 * 1000;
-}
-
-function enqueuePrice(hashName) {
-    if (priceQueueSet.has(hashName) || isSteamRateLimited()) return;
-    priceQueue.push(hashName);
-    priceQueueSet.add(hashName);
-}
-
 function getSteamPriceCached(hashName) {
     const cached = getCachedSteamData(hashName);
     if (cached && isCacheFresh(cached.timestamp)) {
         return { price: cached.price || 0, hasMarket: cached.hasMarket !== false, pending: false };
     }
 
-    enqueuePrice(hashName);
+    // Enqueue price
+    if (!dataManager.getIsSteamRateLimited()) {
+        dataManager.enqueuePrice(hashName);
+    }
 
     if (cached) {
         return { price: cached.price || 0, hasMarket: cached.hasMarket !== false, pending: true };
@@ -194,180 +73,54 @@ function getSteamPriceCached(hashName) {
 }
 
 async function processPriceQueue() {
-    if (priceWorkerActive || priceQueue.length === 0 || isSteamRateLimited()) return;
-    priceWorkerActive = true;
+    const queueSize = dataManager.getPriceQueueSize();
+    if (dataManager.getIsPriceWorkerActive() || queueSize === 0 || dataManager.getIsSteamRateLimited()) {
+        return;
+    }
 
-    const batch = priceQueue.splice(0, CONCURRENCY_LIMIT);
-    batch.forEach(name => priceQueueSet.delete(name));
+    dataManager.setIsPriceWorkerActive(true);
+    const batch = dataManager.dequeuePrices(CONCURRENCY_LIMIT);
+    const inventory = dataManager.getInventory();
 
     await Promise.all(batch.map(async (name) => {
         const data = await getSteamPrice(name, false);
-        const item = inventoryData[name];
-        if (item) {
-            item.sPrice = data.price || 0;
-            item.hasMarket = data.hasMarket;
-            item.pendingPrice = false;
+        if (inventory[name]) {
+            dataManager.updateInventoryItem(name, {
+                sPrice: data.price || 0,
+                hasMarket: data.hasMarket,
+                pendingPrice: false
+            });
         }
     }));
 
-    priceWorkerActive = false;
+    dataManager.setIsPriceWorkerActive(false);
     render();
 }
 
-function loadGroupMode() {
-    try {
-        const value = localStorage.getItem(GROUP_MODE_KEY);
-        groupMode = value || 'none';
-    } catch {
-        groupMode = 'none';
-    }
+// --- NAME ID CACHE ---
+
+let nameIdCache = storage.load('steam_nameid_cache', {});
+
+function saveNameIdCache() {
+    storage.save('steam_nameid_cache', nameIdCache);
 }
 
-function saveGroupMode() {
-    localStorage.setItem(GROUP_MODE_KEY, groupMode);
+// --- ASSET SNAPSHOT ---
+
+function getAssetSnapshot() {
+    return storage.load('inventory_assets_snapshot', []);
 }
 
-function loadCollapsedGroups() {
-    try {
-        const raw = localStorage.getItem(GROUP_COLLAPSE_KEY);
-        collapsedGroups = raw ? JSON.parse(raw) : {};
-    } catch {
-        collapsedGroups = {};
-    }
-}
-
-function loadPriceAlerts() {
-    try {
-        const raw = localStorage.getItem(PRICE_ALERTS_KEY);
-        priceAlerts = raw ? JSON.parse(raw) : [];
-    } catch {
-        priceAlerts = [];
-    }
-}
-
-function savePriceAlerts() {
-    localStorage.setItem(PRICE_ALERTS_KEY, JSON.stringify(priceAlerts.slice(0, 200)));
-}
-
-function loadActionLists() {
-    try {
-        actionSellList = JSON.parse(localStorage.getItem(ACTION_SELL_KEY)) || [];
-        actionBuyList = JSON.parse(localStorage.getItem(ACTION_BUY_KEY)) || [];
-    } catch {
-        actionSellList = [];
-        actionBuyList = [];
-    }
-}
-
-function saveActionLists() {
-    localStorage.setItem(ACTION_SELL_KEY, JSON.stringify(actionSellList));
-    localStorage.setItem(ACTION_BUY_KEY, JSON.stringify(actionBuyList));
-}
-
-function loadAlertSettings() {
-    try {
-        const raw = localStorage.getItem(ALERT_SETTINGS_KEY);
-        if (!raw) return;
-        const data = JSON.parse(raw);
-        alertProfitThreshold = Number(data.alertProfitThreshold ?? alertProfitThreshold);
-        alertUpPercent = Number(data.alertUpPercent ?? alertUpPercent);
-        alertDownPercent = Number(data.alertDownPercent ?? alertDownPercent);
-    } catch {
-        // keep defaults
-    }
-}
-
-function saveAlertSettings() {
-    localStorage.setItem(ALERT_SETTINGS_KEY, JSON.stringify({
-        alertProfitThreshold,
-        alertUpPercent,
-        alertDownPercent
-    }));
-}
-
-function saveCollapsedGroups() {
-    localStorage.setItem(GROUP_COLLAPSE_KEY, JSON.stringify(collapsedGroups));
-}
-
-function loadPriceHistory() {
-    try {
-        const raw = localStorage.getItem(PRICE_HISTORY_KEY);
-        return raw ? JSON.parse(raw) : {};
-    } catch {
-        return {};
-    }
-}
-
-function loadNameIdCache() {
-    try {
-        const raw = localStorage.getItem(NAME_ID_KEY);
-        return raw ? JSON.parse(raw) : {};
-    } catch {
-        return {};
-    }
-}
-
-function saveNameIdCache(cache) {
-    localStorage.setItem(NAME_ID_KEY, JSON.stringify(cache));
-}
-
-function savePriceHistory(history) {
-    localStorage.setItem(PRICE_HISTORY_KEY, JSON.stringify(history));
+function saveAssetSnapshot(assetIds) {
+    storage.save('inventory_assets_snapshot', assetIds);
 }
 
 function loadCountSnapshot() {
-    try {
-        const raw = localStorage.getItem(COUNT_SNAPSHOT_KEY);
-        return raw ? JSON.parse(raw) : {};
-    } catch {
-        return {};
-    }
+    return storage.load('inventory_count_snapshot', {});
 }
 
 function saveCountSnapshot(snapshot) {
-    localStorage.setItem(COUNT_SNAPSHOT_KEY, JSON.stringify(snapshot));
-}
-
-function loadInventorySnapshot() {
-    try {
-        const raw = localStorage.getItem(INVENTORY_SNAPSHOT_KEY);
-        return raw ? JSON.parse(raw) : null;
-    } catch {
-        return null;
-    }
-}
-
-function loadProfitHistory() {
-    try {
-        const raw = localStorage.getItem(PROFIT_HISTORY_KEY);
-        profitHistory = raw ? JSON.parse(raw) : [];
-    } catch {
-        profitHistory = [];
-    }
-}
-
-function saveProfitHistory() {
-    localStorage.setItem(PROFIT_HISTORY_KEY, JSON.stringify(profitHistory.slice(-50)));
-}
-
-function loadIncognito() {
-    try {
-        isIncognito = localStorage.getItem(INCOGNITO_KEY) === 'true';
-    } catch {
-        isIncognito = false;
-    }
-}
-
-function saveIncognito() {
-    localStorage.setItem(INCOGNITO_KEY, isIncognito ? 'true' : 'false');
-}
-
-function updateSteamIdDisplay() {
-    const steamInput = document.getElementById('steam-id-input');
-    if (!steamInput) return;
-
-    steamInput.type = isIncognito ? 'password' : 'text';
-    steamInput.value = currentSteamId;
+    storage.save('inventory_count_snapshot', snapshot);
 }
 
 function updateAccountInfo(name, avatarUrl) {
@@ -550,17 +303,18 @@ async function scan(force = false) {
     const progressBar = document.getElementById('progress-line');
     
     try {
-        isScanning = true;
+        dataManager.setIsScanning(true);
         setStatus("📡 Получение цен Маркета...");
         const mRes = await axios.get('https://market.csgo.com/api/v2/prices/USD.json');
         const marketPrices = {};
         mRes.data.items.forEach(i => marketPrices[i.market_hash_name] = parseFloat(i.price));
-        lastMarketPrices = marketPrices;
+        dataManager.setLastMarketPrices(marketPrices);
 
         setStatus("📦 Загрузка инвентаря...");
-        const accountInfo = await fetchAccountInfo(currentSteamId);
+        const steamId = dataManager.getCurrentSteamId();
+        const accountInfo = await fetchAccountInfo(steamId);
         updateAccountInfo(accountInfo.name || 'Неизвестно', accountInfo.avatar || '');
-        const invRes = await axios.get(`https://steamcommunity.com/inventory/${currentSteamId}/730/2?l=english&count=2000`);
+        const invRes = await axios.get(`https://steamcommunity.com/inventory/${steamId}/730/2?l=english&count=2000`);
         const { descriptions, assets } = invRes.data;
         const currentAssetIds = assets.map(a => a.assetid);
         const previousAssetIds = new Set(getAssetSnapshot());
@@ -614,29 +368,29 @@ async function scan(force = false) {
             return acc;
         }, {});
 
-        missingNames = new Set();
+        const missingNames = new Set();
         Object.keys(previousCounts).forEach(name => {
             const prev = previousCounts[name] || 0;
             const curr = currentCounts[name] || 0;
             if (curr < prev) {
                 const diff = prev - curr;
                 const ref = newInventoryData[name] || {};
-                alerts.unshift({
-                    id: `${Date.now()}-${name}`,
+                dataManager.addAlert({
                     name,
                     img: ref.img || '',
-                    count: diff,
-                    timestamp: new Date().toLocaleString()
+                    count: diff
                 });
                 missingNames.add(name);
             }
         });
 
-        saveAlerts();
+        dataManager.setMissingNames(missingNames);
         saveCountSnapshot(currentCounts);
 
-        const priceHistory = loadPriceHistory();
+        const priceHistory = dataManager.getPriceHistory();
+        const alertSettings = dataManager.getAlertSettings();
         const nowTs = Date.now();
+        
         Object.values(newInventoryData).forEach(item => {
             if (!priceHistory[item.name]) priceHistory[item.name] = [];
             const prevEntry = priceHistory[item.name][priceHistory[item.name].length - 1];
@@ -647,17 +401,15 @@ async function scan(force = false) {
 
             if (prevEntry && prevEntry.sPrice > 0) {
                 const changePct = ((item.sPrice - prevEntry.sPrice) / prevEntry.sPrice) * 100;
-                if (changePct >= alertUpPercent) {
-                    priceAlerts.unshift({
-                        id: `${Date.now()}-${item.name}-up`,
+                if (changePct >= alertSettings.alertUpPercent) {
+                    dataManager.addPriceAlert({
                         name: item.name,
                         message: 'Рост цены',
                         value: formatPercent(changePct)
                     });
                 }
-                if (changePct <= -alertDownPercent) {
-                    priceAlerts.unshift({
-                        id: `${Date.now()}-${item.name}-down`,
+                if (changePct <= -alertSettings.alertDownPercent) {
+                    dataManager.addPriceAlert({
                         name: item.name,
                         message: 'Падение цены',
                         value: formatPercent(changePct)
@@ -665,24 +417,21 @@ async function scan(force = false) {
                 }
             }
 
-            if (item.profit >= alertProfitThreshold) {
-                priceAlerts.unshift({
-                    id: `${Date.now()}-${item.name}-profit`,
+            if (item.profit >= alertSettings.alertProfitThreshold) {
+                dataManager.addPriceAlert({
                     name: item.name,
                     message: 'Профит выше порога',
                     value: formatCurrency(item.profit)
                 });
             }
         });
-        savePriceHistory(priceHistory);
-        savePriceAlerts();
+        dataManager.setPriceHistory(priceHistory);
 
         const newAssets = assets.filter(a => !previousAssetIds.has(a.assetid));
-        newItemNames = new Set();
+        const newItemNames = new Set();
         if (newAssets.length) {
-            const now = new Date().toLocaleString();
             const grouped = newAssets.reduce((acc, asset) => {
-            const desc = descByClass[asset.classid];
+                const desc = descByClass[asset.classid];
                 if (!desc) return acc;
                 const key = desc.market_hash_name;
                 acc[key] = acc[key] || { name: desc.market_hash_name, img: desc.icon_url, count: 0 };
@@ -691,50 +440,50 @@ async function scan(force = false) {
             }, {});
 
             newItemNames = new Set(Object.keys(grouped));
+            dataManager.setNewItemNames(newItemNames);
 
             Object.values(grouped).forEach(item => {
-                historyItems.unshift({
-                    id: `${Date.now()}-${item.name}`,
+                dataManager.addHistoryItem({
                     name: item.name,
                     img: item.img,
-                    count: item.count,
-                    timestamp: now
+                    count: item.count
                 });
             });
+        }   
 
-            saveHistory();
+              saveHistory();
         }
 
         saveAssetSnapshot(currentAssetIds);
 
-        inventoryData = newInventoryData;
-        saveInventorySnapshot({
-            timestamp: Date.now(),
-            data: inventoryData
-        });
+        dataManager.setInventory(newInventoryData);
+        dataManager.setNextScanTime(Date.now() + SCAN_INTERVAL);
+        dataManager.setLastScanCompletedAt(Date.now());
+        
         render();
         buildMarketInsightsFromCache(marketPrices);
-        nextScanTime = Date.now() + SCAN_INTERVAL;
-        lastScanCompletedAt = Date.now();
         setStatus(`✅ Обновлено в ${new Date().toLocaleTimeString()}`);
-        setTimeout(() => progressBar.style.width = '0%', 2000); 
-        isScanning = false;
+        setTimeout(() => progressBar.style.width = '0%', 2000);
+        dataManager.setIsScanning(false);
 
     } catch (err) {
-        isScanning = false;
+        dataManager.setIsScanning(false);
         progressBar.style.width = '0%';
-        const snapshot = loadInventorySnapshot();
-        if (snapshot && snapshot.data) {
-            inventoryData = snapshot.data;
+        
+        // Try to load last snapshot
+        const inventorySnapshot = storage.load('inventory_snapshot', null);
+        if (inventorySnapshot && inventorySnapshot.data) {
+            dataManager.setInventory(inventorySnapshot.data);
             render();
             setStatus("⚠️ Показаны сохранённые данные", true);
         } else {
             setStatus("❌ Ошибка. Steam Rate Limit.", true);
         }
-        setSteamRateLimited(3);
-        nextScanTime = Date.now() + SCAN_INTERVAL;
+        
+        dataManager.setSteamRateLimited(3);
+        dataManager.setNextScanTime(Date.now() + SCAN_INTERVAL);
     }
-}
+
 
 // --- ОТРИСОВКА ИНТЕРФЕЙСА (ИСПРАВЛЕННЫЙ РАСЧЕТ) ---
 function render() {

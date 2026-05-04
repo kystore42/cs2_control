@@ -589,6 +589,128 @@ class DataManager {
     this.actionBuyList = [];
   }
 
+  // ========== Persistence ==========
+
+  /**
+   * Load all persisted data from storage
+   */
+  loadFromStorage() {
+    const keys = {
+      steamId: 'steam_id',
+      history: 'inventory_history',
+      profitHistory: 'profit_history',
+      priceHistory: 'price_history',
+      alerts: 'inventory_alerts',
+      priceAlerts: 'price_alerts',
+      watchlist: 'watchlist_items',
+      marketInsights: 'market_insights',
+      incognito: 'incognito_mode',
+      groupMode: 'group_mode',
+      collapsedGroups: 'group_collapsed',
+      actionSell: 'action_sell',
+      actionBuy: 'action_buy',
+      alertSettings: 'alert_settings',
+      aiSettings: 'ai_settings',
+      inventorySnapshot: 'inventory_snapshot'
+    };
+
+    this.currentSteamId = this.storage.load(keys.steamId, this.currentSteamId);
+    this.historyItems = this.storage.load(keys.history, []);
+    this.profitHistory = this.storage.load(keys.profitHistory, []);
+    this.priceHistory = this.storage.load(keys.priceHistory, {});
+    this.alerts = this.storage.load(keys.alerts, []);
+    this.priceAlerts = this.storage.load(keys.priceAlerts, []);
+    this.watchlist = this.storage.load(keys.watchlist, []);
+    this.marketInsights = this.storage.load(keys.marketInsights, []);
+    this.isIncognito = this.storage.load(keys.incognito, false);
+    this.groupMode = this.storage.load(keys.groupMode, 'none');
+    this.collapsedGroups = this.storage.load(keys.collapsedGroups, {});
+    this.actionSellList = this.storage.load(keys.actionSell, []);
+    this.actionBuyList = this.storage.load(keys.actionBuy, []);
+    
+    const alertSettings = this.storage.load(keys.alertSettings, {});
+    if (alertSettings.alertProfitThreshold !== undefined) {
+      this.alertProfitThreshold = alertSettings.alertProfitThreshold;
+    }
+    if (alertSettings.alertUpPercent !== undefined) {
+      this.alertUpPercent = alertSettings.alertUpPercent;
+    }
+    if (alertSettings.alertDownPercent !== undefined) {
+      this.alertDownPercent = alertSettings.alertDownPercent;
+    }
+
+    const aiSettings = this.storage.load(keys.aiSettings, {});
+    if (aiSettings.aiMinScore !== undefined) {
+      this.aiMinScore = aiSettings.aiMinScore;
+    }
+    if (aiSettings.aiPositiveTrendOnly !== undefined) {
+      this.aiPositiveTrendOnly = aiSettings.aiPositiveTrendOnly;
+    }
+    if (aiSettings.aiSort !== undefined) {
+      this.aiSort = aiSettings.aiSort;
+    }
+
+    const inventorySnapshot = this.storage.load(keys.inventorySnapshot, null);
+    if (inventorySnapshot && inventorySnapshot.data) {
+      this.inventoryData = inventorySnapshot.data;
+    }
+
+    this.log('info', 'Loaded all persisted data from storage');
+  }
+
+  /**
+   * Save all state to storage
+   */
+  saveToStorage() {
+    const keys = {
+      steamId: 'steam_id',
+      history: 'inventory_history',
+      profitHistory: 'profit_history',
+      priceHistory: 'price_history',
+      alerts: 'inventory_alerts',
+      priceAlerts: 'price_alerts',
+      watchlist: 'watchlist_items',
+      marketInsights: 'market_insights',
+      incognito: 'incognito_mode',
+      groupMode: 'group_mode',
+      collapsedGroups: 'group_collapsed',
+      actionSell: 'action_sell',
+      actionBuy: 'action_buy',
+      alertSettings: 'alert_settings',
+      aiSettings: 'ai_settings',
+      inventorySnapshot: 'inventory_snapshot'
+    };
+
+    this.storage.save(keys.steamId, this.currentSteamId);
+    this.storage.save(keys.history, this.historyItems.slice(0, 200));
+    this.storage.save(keys.profitHistory, this.profitHistory.slice(-50));
+    this.storage.save(keys.priceHistory, this.priceHistory);
+    this.storage.save(keys.alerts, this.alerts.slice(0, 200));
+    this.storage.save(keys.priceAlerts, this.priceAlerts.slice(0, 200));
+    this.storage.save(keys.watchlist, this.watchlist);
+    this.storage.save(keys.marketInsights, this.marketInsights.slice(0, 200));
+    this.storage.save(keys.incognito, this.isIncognito);
+    this.storage.save(keys.groupMode, this.groupMode);
+    this.storage.save(keys.collapsedGroups, this.collapsedGroups);
+    this.storage.save(keys.actionSell, this.actionSellList);
+    this.storage.save(keys.actionBuy, this.actionBuyList);
+    this.storage.save(keys.alertSettings, this.getAlertSettings());
+    this.storage.save(keys.aiSettings, this.getAISettings());
+    this.storage.save(keys.inventorySnapshot, {
+      timestamp: Date.now(),
+      data: this.inventoryData
+    });
+  }
+
+  /**
+   * Clear all persisted data
+   */
+  clearStorage() {
+    this.storage.clear();
+    this.reset();
+    this.log('info', 'Cleared all storage');
+  }
+
   /**
    * Internal logging
    * @private

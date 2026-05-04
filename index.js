@@ -1,9 +1,14 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
-const path = require('path');
+import { app, BrowserWindow, ipcMain } from 'electron';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 if (process.argv.includes('--dev')) {
   try {
-    require('electron-reload')(__dirname, {
+    const reload = await import('electron-reload');
+    reload.default(__dirname, {
       electron: path.join(__dirname, 'node_modules', '.bin', 'electron'),
       awaitWriteFinish: true
     });

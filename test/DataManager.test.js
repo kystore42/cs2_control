@@ -511,4 +511,125 @@ describe('DataManager', () => {
       expect(state.watchlistCount).toBe(1);
     });
   });
+
+  describe('Persistence', () => {
+    test('should load from storage', () => {
+      mockStorage.load.mockImplementation((key, defaultValue) => {
+        const data = {
+          'steam_id': '987654321',
+          'inventory_history': [{ name: 'Item X', count: 1 }],
+          'profit_history': [{ ts: 100, totalProfit: 50 }],
+          'watchlist_items': ['Item A'],
+          'alert_settings': {
+            alertProfitThreshold: 3,
+            alertUpPercent: 10,
+            alertDownPercent: 10
+          },
+          'ai_settings': {
+            aiMinScore: 5,
+            aiPositiveTrendOnly: true,
+            aiSort: 'profit'
+          }
+        };
+        return data[key] !== undefined ? data[key] : defaultValue;
+      });
+
+      manager.loadFromStorage();
+
+      expect(manager.getCurrentSteamId()).toBe('987654321');
+      expect(manager.getHistory().length).toBe(1);
+      expect(manager.getProfitHistory().length).toBe(1);
+      expect(manager.getWatchlist()).toContain('Item A');
+      expect(manager.alertProfitThreshold).toBe(3);
+      expect(manager.aiMinScore).toBe(5);
+      expect(mockLogger.info).toHaveBeenCalled();
+    });
+
+    test('should save to storage', () => {
+      manager.setCurrentSteamId('123456789');
+      manager.addHistoryItem({ name: 'Item Y', count: 2 });
+      manager.addProfitEntry(75);
+      manager.addToWatchlist('Item B');
+
+      manager.saveToStorage();
+
+      expect(mockStorage.save).toHaveBeenCalledWith('steam_id', '123456789');
+      expect(mockStorage.save).toHaveBeenCalledWith('inventory_history', expect.any(Array));
+      expect(mockStorage.save).toHaveBeenCalledWith('profit_history', expect.any(Array));
+      expect(mockStorage.save).toHaveBeenCalledWith('watchlist_items', expect.any(Array));
+    });
+
+    test('should respect limit when saving', () => {
+      // Add more than limit items
+      for (let i = 0; i < 210; i++) {
+        manager.addHistoryItem({ name: `Item ${i}`, count: 1 });
+      }
+      for (let i = 0; i < 60; i++) {
+        manager.addProfitEntry(i);
+      }
+
+      manager.saveToStorage();
+
+      // Verify limits when saving
+      const callArgs = mockStorage.save.mock.calls;
+      const historyCall = callArgs.find(args => args[0] === 'inventory_history');
+      const profitCall = callArgs.find(args => args[0] === 'profit_history');
+
+      expect(historyCall[1].length).toBe(200);
+      expect(profitCall[1].length).toBe(50);
+    });
+
+    test('should clear storage', () => {
+      manager.addHistoryItem({ name: 'Item Z', count: 1 });
+      manager.setCurrentTab('signals');
+
+      manager.clearStorage();
+
+      expect(mockStorage.clear).toHaveBeenCalled();
+      expect(manager.getHistory()).toEqual([]);
+      expect(manager.getCurrentTab()).toBe('inventory');
+      expect(mockLogger.info).toHaveBeenCalled();
+    });
+
+    test('should save inventory snapshot', () => {
+      const inventory = { 'Item A': { name: 'Item A', price: 10 } };
+      manager.setInventory(inventory);
+
+      manager.saveToStorage();
+
+      const snapshotCall = mockStorage.save.mock.calls.find(
+        args => args[0] === 'inventory_snapshot'
+      );
+      expect(snapshotCall).toBeDefined();
+      expect(snapshotCall[1].data).toEqual(inventory);
+      expect(snapshotCall[1].timestamp).toBeDefined();
+    });
+
+    test('should handle missing inventory snapshot on load', () => {
+      mockStorage.load.mockReturnValue(null);
+      
+      manager.loadFromStorage();
+
+      expect(manager.getInventory()).toEqual({});
+    });
+
+    test('should load all settings on restore', () => {
+      mockStorage.load.mockImplementation((key, defaultValue) => {
+        if (key === 'alert_settings') {
+          return {
+            alertProfitThreshold: 2.5,
+            alertUpPercent: 7,
+            alertDownPercent: 6
+          };
+        }
+        return defaultValue;
+      });
+
+      manager.loadFromStorage();
+
+      expect(manager.alertProfitThreshold).toBe(2.5);
+      expect(manager.alertUpPercent).toBe(7);
+      expect(manager.alertDownPercent).toBe(6);
+    });
+  });
 });
