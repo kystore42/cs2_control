@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **CS2 SaaS** is a production-grade platform transitioning from a simple Electron app to a **Hybrid Cloud Model** (Local Tauri Client + Remote Go Backend + PostgreSQL).
 
-**Current Phase**: Phase 2 (Auth & Cloud Connection)
+**Current Phase**: Phase 3 (Config Sync Bridge)
 
 - **Desktop Client**: Tauri (Rust) + React (TypeScript)
 - **Backend**: Go microservices (Auth, Account Management, Market Analytics)
@@ -238,6 +238,49 @@ Rust calls the Go backend via `reqwest` (already in Cargo.toml):
 - **Cargo.lock must be committed** — binary crate, not a library
 - **bcrypt cost = 12** in production (configurable via `BCRYPT_COST` env var)
 - **Subscription tier** checked server-side only, never trust the client
+
+## Phase 3: Config Sync Bridge
+
+### Sync Engine (`core/sync/`)
+
+Background watcher that detects CS2 config file changes and pushes to the Go backend:
+
+- **`sync/watcher.rs`**: Wraps `notify` v6 watcher; bridges OS file events to `tokio::sync::mpsc::UnboundedReceiver<PathBuf>`. Only `.cfg` files pass through.
+- **`sync/engine.rs`**: `SyncEngine` holds `Arc<Mutex<TokenState>>`. Call `engine.start(watch_dirs)` where `watch_dirs: Vec<(String, PathBuf)>` maps `(steam_account_id, config_dir)`. Returns a `JoinHandle`. Debounce is 500 ms — events within that window are coalesced per path.
+- **Token refresh**: On 401, engine calls `ApiClient::refresh_access_token(refresh_token)`, updates `token_state.access_token`, and retries once. If refresh fails, the push is silently skipped (next file change will retry).
+
+### HTTP Client (`core/api/client.rs`)
+
+- `ApiClient::new(access_token: Option<String>)` — reads `CS2_API_URL` from env (default `http://localhost:8080`)
+- `post<B, R>()` / `get<R>()` are private generics; public methods are `bulk_create_accounts`, `sync_config`, `refresh_access_token`
+- 401 → `CoreError::Unauthorized`; other non-2xx → `CoreError::SyncError`
+
+### Configs API (Go)
+
+```text
+GET  /api/v1/configs              → List configs (optional ?account_id=)
+POST /api/v1/configs/sync         → Upsert config from Rust (JSONB content, SHA256 checksum)
+GET  /api/v1/configs/:id          → Fetch single config
+```
+
+- Upsert uses `ON CONFLICT ... DO UPDATE WHERE checksum != EXCLUDED.checksum` — no write if unchanged
+- `content` column is `JSONB`; Go model uses `json.RawMessage` to pass-through without double-encoding
+- `config_type` is a PostgreSQL ENUM: `crosshair | viewmodel | binds | autoexec | raw`
+
+### CI/CD (`.github/workflows/ci.yml`)
+
+Five jobs on every push/PR to `main`:
+
+1. `test-js` — Jest on ubuntu-latest
+2. `lint-go` — golangci-lint + `go vet` (ubuntu-latest)
+3. `test-go` — `go test ./...` with a Postgres 15 service container
+4. `lint-sql` — sqlfluff on `database/migrations/`
+5. `check-rust` — `cargo check --lib` + `cargo clippy` on **windows-latest** (required for `winreg`)
+
+### Key Invariants (updated)
+
+- **JWT in memory only** — `SyncEngine.token_state` is in-process `Arc<Mutex<_>>`, never persisted to disk or registry
+- `config_type` detect: `autoexec.cfg` → autoexec, `config.cfg` → viewmodel, `*crosshair*` → crosshair, `*bind*` → binds, else → raw
 
 ## Token Economy for Claude
 

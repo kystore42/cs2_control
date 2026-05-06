@@ -3,7 +3,11 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::env;
 use crate::error::{CoreError, CoreResult};
-use super::types::{BulkCreateAccountsRequest, BulkCreateAccountsResponse};
+use super::types::{
+    BulkCreateAccountsRequest, BulkCreateAccountsResponse,
+    ConfigSyncRequest, ConfigSyncResponse,
+    RefreshTokenRequest, RefreshTokenResponse,
+};
 
 pub struct ApiClient {
     http: Client,
@@ -30,19 +34,54 @@ impl ApiClient {
         self.post("/api/v1/accounts/bulk", &payload).await
     }
 
+    pub async fn sync_config(
+        &self,
+        payload: ConfigSyncRequest,
+    ) -> CoreResult<ConfigSyncResponse> {
+        self.post("/api/v1/configs/sync", &payload).await
+    }
+
+    pub async fn refresh_access_token(&self, refresh_token: &str) -> CoreResult<String> {
+        let payload = RefreshTokenRequest {
+            refresh_token: refresh_token.to_string(),
+        };
+        let resp: RefreshTokenResponse = self.post("/api/v1/auth/refresh", &payload).await?;
+        Ok(resp.access_token)
+    }
+
     async fn post<B, R>(&self, path: &str, body: &B) -> CoreResult<R>
     where
         B: Serialize,
         R: DeserializeOwned,
     {
+        self.request(reqwest::Method::POST, path, Some(body)).await
+    }
+
+    #[allow(dead_code)]
+    async fn get<R>(&self, path: &str) -> CoreResult<R>
+    where
+        R: DeserializeOwned,
+    {
+        self.request::<(), R>(reqwest::Method::GET, path, None).await
+    }
+
+    async fn request<B, R>(&self, method: reqwest::Method, path: &str, body: Option<&B>) -> CoreResult<R>
+    where
+        B: Serialize,
+        R: DeserializeOwned,
+    {
         let url = format!("{}{}", self.base_url, path);
-        let mut req = self.http.post(&url).json(body);
+        let mut builder = self.http.request(method, &url);
 
         if let Some(token) = &self.access_token {
-            req = req.header("Authorization", format!("Bearer {}", token));
+            builder = builder.header("Authorization", format!("Bearer {}", token));
         }
 
-        let resp = req.send().await.map_err(|e| {
+        if let Some(b) = body {
+            builder = builder.json(b);
+        }
+
+        let resp = builder.send().await.map_err(|e| {
             CoreError::SyncError(format!("HTTP request failed: {}", e))
         })?;
 
@@ -51,17 +90,15 @@ impl ApiClient {
             CoreError::SyncError(format!("Failed to read response body: {}", e))
         })?;
 
+        if status == StatusCode::UNAUTHORIZED {
+            return Err(CoreError::Unauthorized);
+        }
+
         if !status.is_success() {
             return Err(CoreError::SyncError(format!(
                 "API returned {}: {}",
                 status, text
             )));
-        }
-
-        if status == StatusCode::NO_CONTENT || text.is_empty() {
-            return Err(CoreError::SyncError(
-                "Expected JSON body but got empty response".to_string(),
-            ));
         }
 
         serde_json::from_str::<R>(&text).map_err(|e| {

@@ -31,6 +31,21 @@ pub enum CoreError {
 
     #[error("Sync failed: {0}")]
     SyncError(String),
+
+    #[error("Unauthorized: token expired or invalid")]
+    Unauthorized,
+
+    #[error("File watcher error: {0}")]
+    WatcherError(String),
+
+    #[error("Config error: {0}")]
+    ConfigError(String),
+}
+
+impl From<notify::Error> for CoreError {
+    fn from(e: notify::Error) -> Self {
+        CoreError::WatcherError(e.to_string())
+    }
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;

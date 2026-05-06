@@ -16,6 +16,16 @@ pub struct AuthResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RefreshTokenRequest {
+    pub refresh_token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RefreshTokenResponse {
+    pub access_token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateAccountPayload {
     pub steam_id: u64,
     pub account_name: String,
@@ -33,6 +43,22 @@ pub struct BulkCreateAccountsRequest {
 pub struct BulkCreateAccountsResponse {
     pub created: usize,
     pub total: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigSyncRequest {
+    pub steam_account_id: String,
+    pub config_type: String,
+    pub config_name: String,
+    pub content: serde_json::Value,
+    pub checksum: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigSyncResponse {
+    pub id: String,
+    pub updated: bool,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -32,6 +32,7 @@ func main() {
 
 	authH := handlers.NewAuthHandler(db)
 	accountH := handlers.NewAccountHandler(db)
+	configH := handlers.NewConfigHandler(db)
 
 	e.GET("/health", healthCheck)
 
@@ -50,6 +51,10 @@ func main() {
 	api.GET("/accounts", accountH.ListAccounts)
 	api.POST("/accounts/bulk", accountH.CreateAccounts)
 	api.POST("/accounts/:id/sync", accountH.SyncAccount)
+
+	api.GET("/configs", configH.ListConfigs)
+	api.POST("/configs/sync", configH.SyncConfig)
+	api.GET("/configs/:id", configH.GetConfig)
 
 	port := getEnv("PORT", "8080")
 	log.Printf("CS2 API starting on :%s", port)
