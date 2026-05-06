@@ -1,0 +1,75 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Tauri build
+src-tauri/target/
+src-tauri/Cargo.lock
+
+# Go
+backend/*/vendor/
+backend/*/*.go.sum
+backend/*/*.go.mod.lock
+
+# React / TypeScript
+build/
+dist/
+.env.local
+.env.*.local
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.c9/
+*.sublime-workspace
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+postgres_data/
+.env
+
+# Docker
+.docker_env
+docker-compose.override.yml
+
+# Testing
+coverage/
+.nyc_output/
+.jest_cache/
+
+# Build outputs
+dist-tauri/
+target/
+out/
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
