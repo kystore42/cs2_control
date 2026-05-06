@@ -1,0 +1,31 @@
+{
+  "mssql.enableSqlAuthenticationProvider": false,
+  "mssql.intelliSense.enableIntelliSense": false,
+  "sql.linter.driver": "PostgreSQL",
+  "sqltools.connections": [
+    {
+      "name": "CS2 SaaS (local)",
+      "driver": "PostgreSQL",
+      "server": "localhost",
+      "port": 5432,
+      "database": "cs2_saas",
+      "username": "postgres"
+    }
+  ],
+  "[sql]": {
+    "editor.defaultFormatter": "adpyke.codesnap"
+  },
+  "files.associations": {
+    "*.sql": "sql"
+  },
+  "editor.formatOnSave": true,
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  },
+  "[go]": {
+    "editor.defaultFormatter": "golang.go"
+  },
+  "go.lintTool": "golangci-lint",
+  "go.lintOnSave": "package",
+  "rust-analyzer.cargo.features": "all"
+}

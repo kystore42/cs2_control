@@ -3,14 +3,11 @@ node_modules/
 .pnp
 .pnp.js
 
-# Tauri build
-src-tauri/target/
-src-tauri/Cargo.lock
+# Tauri build — keep Cargo.lock (binary crate, not library)
+frontend/src-tauri/target/
 
-# Go
+# Go — keep go.sum (it's a lockfile that must be committed)
 backend/*/vendor/
-backend/*/*.go.sum
-backend/*/*.go.mod.lock
 
 # React / TypeScript
 build/
@@ -35,8 +32,10 @@ yarn-error.log*
 ehthumbs.db
 Thumbs.db
 
-# IDE
-.vscode/
+# IDE — commit project settings, ignore personal overrides
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .idea/
 *.swp
 *.swo

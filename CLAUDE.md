@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **CS2 SaaS** is a production-grade platform transitioning from a simple Electron app to a **Hybrid Cloud Model** (Local Tauri Client + Remote Go Backend + PostgreSQL).
 
-**Current Phase**: Phase 1-3 (Foundation, Auth, Account Management)
+**Current Phase**: Phase 2 (Auth & Cloud Connection)
 
 - **Desktop Client**: Tauri (Rust) + React (TypeScript)
 - **Backend**: Go microservices (Auth, Account Management, Market Analytics)
@@ -17,15 +17,56 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
+### Legacy Electron (still active, deprecating in Phase 8)
+
 ```bash
-npm start          # Launch Electron app (production)
-npm run dev        # Launch Electron with hot-reload (enables file watching)
-npm test           # Run all Jest tests
-npm run test:watch # Run tests in watch mode
-npm run test:coverage # Generate coverage report
+npm start                # Launch Electron app
+npm run dev              # Launch with hot-reload
+npm test                 # Jest tests (requires NODE_OPTIONS=--experimental-vm-modules, set in package.json)
+npm run test:watch
+npm run test:coverage
 ```
 
-**Important**: Tests require the `NODE_OPTIONS=--experimental-vm-modules` flag, which is automatically set in package.json.
+### Rust Core (`frontend/src-tauri/`)
+
+```bash
+cargo build --lib        # Compile library
+cargo build --release    # Compile binary
+cargo run --bin cs2-core # Run CLI binary
+cargo test               # All tests
+cargo test <name>        # Single test
+cargo clippy             # Lint
+cargo fmt                # Format
+```
+
+### Go Backend (`backend/api/`)
+
+```bash
+go run main.go           # Start API server (default port 8080)
+go build -o cs2-api      # Compile binary
+go test ./...            # All tests
+go test -v -run <name> ./handlers  # Single test
+go fmt ./...             # Format
+go vet ./...             # Lint
+```
+
+### Docker / Database
+
+```bash
+docker-compose up -d                               # Start PostgreSQL + Redis + Adminer
+psql -h localhost -U postgres -d cs2_saas          # Connect to DB
+psql cs2_saas < database/migrations/XXX.sql        # Apply migration
+docker-compose down                                # Stop all services
+```
+
+### Environment Variables (Go API)
+
+```env
+DB_HOST=localhost  DB_PORT=5432  DB_USER=postgres  DB_PASSWORD=postgres  DB_NAME=cs2_saas
+JWT_SECRET=<min-32-char-secret>
+PORT=8080
+BCRYPT_COST=12
+```
 
 ## Architecture Overview
 
@@ -158,10 +199,49 @@ database/                    # PostgreSQL migrations
 - **Migrations**: SQL files in `database/migrations/`
 - **Persistence**: All data synced via Go backend (no localStorage)
 
+## Phase 2: Auth & Cloud Connection
+
+### Auth Flow (Go)
+
+```text
+POST /api/v1/auth/register  → hash password (bcrypt) → insert user → return JWT pair
+POST /api/v1/auth/login     → verify password → return JWT pair
+POST /api/v1/auth/refresh   → verify refresh token → return new access token
+POST /api/v1/auth/logout    → blacklist refresh token (Redis)
+```
+
+JWT: **access token** (15 min, HS256) + **refresh token** (7 days, stored in DB).  
+`user_id` claim in JWT is extracted by middleware and placed in `c.Get("user_id")`.
+
+### Auth Middleware (`backend/api/middleware/auth.go`)
+
+All `/api/v1/*` routes except `/auth/*` pass through `JWTMiddleware`.  
+Middleware validates token signature, expiry, and sets `c.Set("user_id", claims.UserID)`.
+
+### Subscription Enforcement (`middleware/subscription.go`)
+
+`RequireTier(tier)` middleware checks `users.subscription_tier` and blocks requests
+from under-tier users. Pro = 10 accounts max, Enterprise = 100+.
+
+### Rust HTTP Client (`core/api/`)
+
+Rust calls the Go backend via `reqwest` (already in Cargo.toml):
+
+- `core/api/client.rs` — base URL, auth header injection, error mapping
+- `core/api/types.rs` — mirrors Go models as Rust structs
+- `commands/sync.rs` — Tauri command: detect local accounts → POST to backend
+
+### Key Invariants
+
+- **Never store JWT in Rust** — frontend (React/Tauri webview) holds tokens in memory
+- **go.sum must be committed** — it's the dependency lockfile
+- **Cargo.lock must be committed** — binary crate, not a library
+- **bcrypt cost = 12** in production (configurable via `BCRYPT_COST` env var)
+- **Subscription tier** checked server-side only, never trust the client
+
 ## Token Economy for Claude
 
-- **Legacy System**: Read `modules/DataManager.js` for state structure (still informative through Phase 3)
-- **New Rust Code**: Async/await, self-documenting names, no comments. Read error types first.
-- **New Go Code**: Middleware-heavy, dependency injection. Check handlers before models.
-- **High-context**: Rust + Go bridge is critical; read `commands/accounts.rs` + `api/handlers/accounts.go` together
-- **Fast decisions**: New features follow pattern: Rust core → Tauri command → Go handler → DB
+- **Auth flow**: Read `handlers/auth.go` → `middleware/auth.go` → `models/user.go` (in that order)
+- **Rust HTTP**: Read `core/api/client.rs` + `core/api/types.rs` before touching `commands/sync.rs`
+- **Legacy System**: `modules/DataManager.js` still useful for understanding state shape through Phase 3
+- **Fast decisions**: Auth feature → `handlers/auth.go`; new protected endpoint → add to route group in `main.go`; new Rust→cloud call → `commands/sync.rs`

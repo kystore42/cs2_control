@@ -1,6 +1,8 @@
 -- CS2 SaaS PostgreSQL Schema
--- Complete schema file for reference
--- Use migrations/ directory for incremental deployment
+-- Target: PostgreSQL 15+ ONLY. Not compatible with T-SQL/SQL Server or MySQL.
+-- IDE SQL linters configured for T-SQL will flag false positives on:
+--   CREATE TYPE AS ENUM, partial indices (WHERE clause), OR in index predicates.
+-- Use migrations/ directory for incremental deployment.
 
 CREATE TYPE subscription_tier AS ENUM ('free', 'pro', 'enterprise');
 CREATE TYPE sync_status AS ENUM ('pending', 'syncing', 'completed', 'failed');
@@ -52,6 +54,7 @@ CREATE TABLE steam_accounts (
     local_path VARCHAR(2048),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ,
     UNIQUE(user_id, steam_id)
 );
 

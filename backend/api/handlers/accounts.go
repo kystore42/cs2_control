@@ -24,7 +24,7 @@ func (h *AccountHandler) ListAccounts(c echo.Context) error {
 		        is_primary, last_synced_at, sync_status, error_message, local_path,
 		        created_at, updated_at
 		 FROM steam_accounts
-		 WHERE user_id = $1 AND deleted_at IS NULL
+		 WHERE user_id = $1
 		 ORDER BY is_primary DESC, created_at ASC`,
 		userID,
 	)
@@ -60,7 +60,7 @@ func (h *AccountHandler) CreateAccounts(c echo.Context) error {
 	userID := c.Get("user_id").(string)
 	var req models.BulkCreateAccountRequest
 
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request format")
 	}
 
@@ -103,7 +103,7 @@ func (h *AccountHandler) SyncAccount(c echo.Context) error {
 	accountID := c.Param("id")
 	var req models.SyncAccountRequest
 
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request format")
 	}
 

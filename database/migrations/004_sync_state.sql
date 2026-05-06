@@ -1,3 +1,4 @@
+-- PostgreSQL 15+. T-SQL linters will flag CREATE TYPE AS ENUM as invalid — this is expected.
 CREATE TYPE sync_direction AS ENUM ('local_to_cloud', 'cloud_to_local', 'bidirectional');
 CREATE TYPE conflict_resolution AS ENUM ('local_wins', 'cloud_wins', 'manual');
 

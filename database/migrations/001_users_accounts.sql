@@ -1,3 +1,4 @@
+-- PostgreSQL 15+. CREATE TYPE AS ENUM and partial WHERE indices are PostgreSQL syntax; T-SQL linters will show false positives.
 CREATE TYPE subscription_tier AS ENUM ('free', 'pro', 'enterprise');
 CREATE TYPE sync_status AS ENUM ('pending', 'syncing', 'completed', 'failed');
 
@@ -30,6 +31,7 @@ CREATE TABLE steam_accounts (
     local_path VARCHAR(2048),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ,
     UNIQUE(user_id, steam_id)
 );
 

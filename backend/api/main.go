@@ -4,11 +4,15 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	echomw "github.com/labstack/echo/v4/middleware"
 	_ "github.com/lib/pq"
+
+	"cs2-saas/api/handlers"
+	"cs2-saas/api/middleware"
 )
 
 func main() {
@@ -16,25 +20,49 @@ func main() {
 	defer db.Close()
 
 	e := echo.New()
+	e.HideBanner = true
 
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
-	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+	e.Use(echomw.Logger())
+	e.Use(echomw.Recover())
+	e.Use(echomw.CORSWithConfig(echomw.CORSConfig{
 		AllowOrigins: []string{"*"},
-		AllowMethods: []string{echo.GET, echo.POST, echo.PUT, echo.DELETE},
+		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
+		AllowHeaders: []string{echo.HeaderContentType, echo.HeaderAuthorization},
 	}))
 
-	registerRoutes(e, db)
+	authH := handlers.NewAuthHandler(db)
+	accountH := handlers.NewAccountHandler(db)
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+	e.GET("/health", healthCheck)
 
-	log.Printf("CS2 API Server starting on :%s", port)
-	if err := e.Start(":" + port); err != nil {
+	auth := e.Group("/api/v1/auth")
+	auth.Use(middleware.RateLimitAuth)
+	auth.POST("/register", authH.Register)
+	auth.POST("/login", authH.Login)
+	auth.POST("/refresh", authH.Refresh)
+
+	api := e.Group("/api/v1")
+	api.Use(middleware.JWTMiddleware)
+	api.Use(middleware.RateLimitAPI)
+
+	api.POST("/auth/logout", authH.Logout)
+
+	api.GET("/accounts", accountH.ListAccounts)
+	api.POST("/accounts/bulk", accountH.CreateAccounts)
+	api.POST("/accounts/:id/sync", accountH.SyncAccount)
+
+	port := getEnv("PORT", "8080")
+	log.Printf("CS2 API starting on :%s", port)
+	if err := e.Start(":" + port); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+}
+
+func healthCheck(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]string{
+		"status":  "ok",
+		"version": "0.2.0",
+	})
 }
 
 func initDB() *sql.DB {
@@ -49,7 +77,7 @@ func initDB() *sql.DB {
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Fatalf("Failed to open database: %v", err)
 	}
 
 	db.SetMaxOpenConns(25)
@@ -59,47 +87,13 @@ func initDB() *sql.DB {
 		log.Fatalf("Failed to ping database: %v", err)
 	}
 
-	log.Println("Database connection established")
+	log.Println("Database connected")
 	return db
 }
 
-func registerRoutes(e *echo.Echo, db *sql.DB) {
-	e.GET("/health", healthCheck)
-	e.POST("/api/v1/accounts/detect", detectAccounts)
-	e.GET("/api/v1/accounts", listAccounts)
-	e.POST("/api/v1/accounts/sync", syncAccount)
-}
-
-func healthCheck(c echo.Context) error {
-	return c.JSON(200, map[string]string{
-		"status": "ok",
-		"version": "0.1.0",
-	})
-}
-
-func detectAccounts(c echo.Context) error {
-	return c.JSON(200, map[string]interface{}{
-		"message": "Account detection endpoint",
-	})
-}
-
-func listAccounts(c echo.Context) error {
-	return c.JSON(200, map[string]interface{}{
-		"accounts": []interface{}{},
-		"total": 0,
-	})
-}
-
-func syncAccount(c echo.Context) error {
-	return c.JSON(202, map[string]string{
-		"status": "pending",
-		"message": "Sync job queued",
-	})
-}
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
 	}
-	return defaultValue
+	return fallback
 }
