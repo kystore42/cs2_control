@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"os"
 	"time"
 
@@ -42,12 +44,25 @@ func generateAccessToken(userID, email, tier string) (string, error) {
 }
 
 func generateRefreshToken(userID string) (string, error) {
+	jti, err := randomID()
+	if err != nil {
+		return "", err
+	}
 	claims := jwt.RegisteredClaims{
+		ID:        jti,
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(refreshTokenTTL)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
 		Subject:   userID,
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(jwtSecret())
+}
+
+func randomID() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 func parseToken(tokenStr string) (*Claims, error) {

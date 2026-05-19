@@ -116,9 +116,14 @@ impl SyncEngine {
         let refresh_token = self.token_state.lock().unwrap().refresh_token.clone();
         let auth_client = ApiClient::new(None);
 
-        if let Ok(new_token) = auth_client.refresh_access_token(&refresh_token).await {
-            self.token_state.lock().unwrap().access_token = new_token.clone();
-            let _ = ApiClient::new(Some(new_token)).sync_config(payload).await;
+        if let Ok(tokens) = auth_client.refresh_access_token(&refresh_token).await {
+            let access_token = {
+                let mut state = self.token_state.lock().unwrap();
+                state.access_token = tokens.access_token.clone();
+                state.refresh_token = tokens.refresh_token;
+                tokens.access_token
+            };
+            let _ = ApiClient::new(Some(access_token)).sync_config(payload).await;
         }
     }
 }

@@ -59,8 +59,9 @@ mod tests {
 
     #[test]
     fn test_parse_account_id_valid() {
-        let result = RegistryReader::parse_account_id("76561198123456789");
+        let result = RegistryReader::parse_account_id("22202");
         assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 22202);
     }
 
     #[test]

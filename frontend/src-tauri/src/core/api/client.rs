@@ -4,8 +4,8 @@ use serde::Serialize;
 use std::env;
 use crate::error::{CoreError, CoreResult};
 use super::types::{
-    BulkCreateAccountsRequest, BulkCreateAccountsResponse,
-    ConfigSyncRequest, ConfigSyncResponse,
+    AccountListResponse, AuthResponse, BulkCreateAccountsRequest, BulkCreateAccountsResponse,
+    ConfigSyncRequest, ConfigSyncResponse, LoginRequest, RegisterRequest,
     RefreshTokenRequest, RefreshTokenResponse,
 };
 
@@ -27,11 +27,23 @@ impl ApiClient {
         }
     }
 
+    pub async fn register(&self, payload: RegisterRequest) -> CoreResult<AuthResponse> {
+        self.post("/api/v1/auth/register", &payload).await
+    }
+
+    pub async fn login(&self, payload: LoginRequest) -> CoreResult<AuthResponse> {
+        self.post("/api/v1/auth/login", &payload).await
+    }
+
     pub async fn bulk_create_accounts(
         &self,
         payload: BulkCreateAccountsRequest,
     ) -> CoreResult<BulkCreateAccountsResponse> {
         self.post("/api/v1/accounts/bulk", &payload).await
+    }
+
+    pub async fn list_accounts(&self) -> CoreResult<AccountListResponse> {
+        self.get("/api/v1/accounts").await
     }
 
     pub async fn sync_config(
@@ -41,12 +53,14 @@ impl ApiClient {
         self.post("/api/v1/configs/sync", &payload).await
     }
 
-    pub async fn refresh_access_token(&self, refresh_token: &str) -> CoreResult<String> {
+    pub async fn refresh_access_token(
+        &self,
+        refresh_token: &str,
+    ) -> CoreResult<RefreshTokenResponse> {
         let payload = RefreshTokenRequest {
             refresh_token: refresh_token.to_string(),
         };
-        let resp: RefreshTokenResponse = self.post("/api/v1/auth/refresh", &payload).await?;
-        Ok(resp.access_token)
+        self.post("/api/v1/auth/refresh", &payload).await
     }
 
     async fn post<B, R>(&self, path: &str, body: &B) -> CoreResult<R>
@@ -57,7 +71,6 @@ impl ApiClient {
         self.request(reqwest::Method::POST, path, Some(body)).await
     }
 
-    #[allow(dead_code)]
     async fn get<R>(&self, path: &str) -> CoreResult<R>
     where
         R: DeserializeOwned,

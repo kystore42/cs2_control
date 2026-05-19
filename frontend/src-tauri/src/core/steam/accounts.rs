@@ -22,6 +22,12 @@ pub struct AccountDetectionResult {
     pub error_message: Option<String>,
 }
 
+const STEAMID64_INDIVIDUAL_BASE: u64 = 0x0110_0001_0000_0000;
+
+pub fn account_id_to_steamid64(account_id: u32) -> u64 {
+    STEAMID64_INDIVIDUAL_BASE + account_id as u64
+}
+
 pub struct AccountDetector;
 
 impl AccountDetector {
@@ -131,5 +137,11 @@ mod tests {
     fn test_account_detection_total_matches_count() {
         let result = AccountDetector::detect_all_accounts();
         assert_eq!(result.total_found, result.accounts.len());
+    }
+
+    #[test]
+    fn test_account_id_to_steamid64() {
+        assert_eq!(account_id_to_steamid64(0), 0x0110_0001_0000_0000);
+        assert_eq!(account_id_to_steamid64(22202), 76561197960287930);
     }
 }

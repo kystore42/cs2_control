@@ -68,6 +68,19 @@ func (h *AccountHandler) CreateAccounts(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "No accounts provided")
 	}
 
+	accountLimit, ok := c.Get("account_limit").(int)
+	if !ok {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Subscription limit unavailable")
+	}
+
+	var existing int
+	if err := h.db.QueryRow(
+		`SELECT COUNT(*) FROM steam_accounts WHERE user_id = $1 AND deleted_at IS NULL`,
+		userID,
+	).Scan(&existing); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Account count failed")
+	}
+
 	tx, err := h.db.Begin()
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Transaction failed")
@@ -75,17 +88,28 @@ func (h *AccountHandler) CreateAccounts(c echo.Context) error {
 	defer tx.Rollback()
 
 	created := 0
-	for i, localAcc := range req.Accounts {
-		_, err := tx.Exec(
+	total := existing
+	for _, localAcc := range req.Accounts {
+		var id string
+		err := tx.QueryRow(
 			`INSERT INTO steam_accounts (user_id, steam_id, account_name, persona_name, is_primary, local_path)
 			 VALUES ($1, $2, $3, $4, $5, $6)
-			 ON CONFLICT (user_id, steam_id) DO NOTHING`,
-			userID, localAcc.SteamID, localAcc.AccountName, localAcc.PersonaName, i == 0, localAcc.LocalPath,
-		)
-		if err != nil && err != sql.ErrNoRows {
+			 ON CONFLICT (user_id, steam_id) DO NOTHING
+			 RETURNING id`,
+			userID, localAcc.SteamID, localAcc.AccountName, localAcc.PersonaName, total == 0, localAcc.LocalPath,
+		).Scan(&id)
+		if err == sql.ErrNoRows {
+			continue
+		}
+		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "Insert failed")
 		}
 		created++
+		total++
+		if total > accountLimit {
+			return echo.NewHTTPError(http.StatusForbidden,
+				"Account limit reached for your subscription tier")
+		}
 	}
 
 	if err := tx.Commit(); err != nil {

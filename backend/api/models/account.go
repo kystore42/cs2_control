@@ -22,7 +22,7 @@ type SteamAccount struct {
 	IsPrimary     bool       `json:"is_primary"`
 	LastSyncedAt  *time.Time `json:"last_synced_at"`
 	SyncStatus    SyncStatus `json:"sync_status"`
-	ErrorMessage  string     `json:"error_message"`
+	ErrorMessage  *string    `json:"error_message"`
 	LocalPath     string     `json:"local_path"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`

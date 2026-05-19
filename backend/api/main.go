@@ -13,6 +13,7 @@ import (
 
 	"cs2-saas/api/handlers"
 	"cs2-saas/api/middleware"
+	"cs2-saas/api/models"
 )
 
 func main() {
@@ -49,7 +50,7 @@ func main() {
 	api.POST("/auth/logout", authH.Logout)
 
 	api.GET("/accounts", accountH.ListAccounts)
-	api.POST("/accounts/bulk", accountH.CreateAccounts)
+	api.POST("/accounts/bulk", accountH.CreateAccounts, middleware.RequireTier(db, models.TierFree))
 	api.POST("/accounts/:id/sync", accountH.SyncAccount)
 
 	api.GET("/configs", configH.ListConfigs)

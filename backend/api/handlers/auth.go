@@ -162,9 +162,18 @@ func (h *AuthHandler) Refresh(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Token generation failed")
 	}
+	newRefreshToken, err := generateRefreshToken(claims.Subject)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Token generation failed")
+	}
+
+	if err := h.rotateRefreshToken(claims.Subject, body.RefreshToken, newRefreshToken); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Session rotation failed")
+	}
 
 	return c.JSON(http.StatusOK, map[string]string{
-		"access_token": accessToken,
+		"access_token":  accessToken,
+		"refresh_token": newRefreshToken,
 	})
 }
 
@@ -192,6 +201,39 @@ func (h *AuthHandler) storeRefreshToken(userID, token string) error {
 		userID, hashToken(token),
 	)
 	return err
+}
+
+func (h *AuthHandler) rotateRefreshToken(userID, oldToken, newToken string) error {
+	tx, err := h.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec(
+		`DELETE FROM refresh_tokens WHERE user_id = $1 AND token_hash = $2`,
+		userID, hashToken(oldToken),
+	)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+
+	if _, err := tx.Exec(
+		`INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+		 VALUES ($1, $2, NOW() + INTERVAL '7 days')`,
+		userID, hashToken(newToken),
+	); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (h *AuthHandler) refreshTokenExists(userID, token string) bool {

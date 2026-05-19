@@ -213,6 +213,11 @@ POST /api/v1/auth/logout    → blacklist refresh token (Redis)
 JWT: **access token** (15 min, HS256) + **refresh token** (7 days, stored in DB).  
 `user_id` claim in JWT is extracted by middleware and placed in `c.Get("user_id")`.
 
+**Refresh token rotation**: `/auth/refresh` returns a *new pair* — `rotateRefreshToken` deletes
+the old hash and inserts the new one in one transaction. A reused refresh token fails
+(its hash no longer exists). The Rust `RefreshTokenResponse` carries both tokens; the
+sync engine writes both back into `TokenState`.
+
 ### Auth Middleware (`backend/api/middleware/auth.go`)
 
 All `/api/v1/*` routes except `/auth/*` pass through `JWTMiddleware`.  
@@ -220,8 +225,11 @@ Middleware validates token signature, expiry, and sets `c.Set("user_id", claims.
 
 ### Subscription Enforcement (`middleware/subscription.go`)
 
-`RequireTier(tier)` middleware checks `users.subscription_tier` and blocks requests
-from under-tier users. Pro = 10 accounts max, Enterprise = 100+.
+`RequireTier(db, tier)` middleware checks `users.subscription_tier`, blocks under-tier
+users, and sets `c.Get("account_limit")` (free=1, pro=10, enterprise=999). It is wired
+on `/accounts/bulk` with `TierFree` minimum — every tier passes the gate but inherits
+its limit. `CreateAccounts` counts existing rows and aborts the transaction with 403
+once `existing + inserted` exceeds the limit.
 
 ### Rust HTTP Client (`core/api/`)
 

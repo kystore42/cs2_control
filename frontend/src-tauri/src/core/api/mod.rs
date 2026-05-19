@@ -3,7 +3,8 @@ pub mod types;
 
 pub use client::ApiClient;
 pub use types::{
-    BulkCreateAccountsRequest, BulkCreateAccountsResponse, CreateAccountPayload,
+    AccountListResponse, ApiUser, AuthResponse, BulkCreateAccountsRequest,
+    BulkCreateAccountsResponse, CloudAccount, CreateAccountPayload,
     ConfigSyncRequest, ConfigSyncResponse,
-    RefreshTokenRequest, RefreshTokenResponse,
+    LoginRequest, RegisterRequest, RefreshTokenRequest, RefreshTokenResponse,
 };

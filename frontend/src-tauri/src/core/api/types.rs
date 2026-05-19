@@ -16,6 +16,19 @@ pub struct AuthResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterRequest {
+    pub email: String,
+    pub password: String,
+    pub full_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoginRequest {
+    pub email: String,
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefreshTokenRequest {
     pub refresh_token: String,
 }
@@ -23,6 +36,7 @@ pub struct RefreshTokenRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefreshTokenResponse {
     pub access_token: String,
+    pub refresh_token: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +57,22 @@ pub struct BulkCreateAccountsRequest {
 pub struct BulkCreateAccountsResponse {
     pub created: usize,
     pub total: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloudAccount {
+    pub id: String,
+    pub steam_id: i64,
+    pub account_name: String,
+    pub persona_name: Option<String>,
+    pub is_primary: bool,
+    pub sync_status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountListResponse {
+    pub total: usize,
+    pub accounts: Vec<CloudAccount>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

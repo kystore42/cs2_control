@@ -5,9 +5,16 @@ node_modules/
 
 # Tauri build — keep Cargo.lock (binary crate, not library)
 frontend/src-tauri/target/
+# Tauri-generated schemas/config (regenerated on build)
+frontend/src-tauri/gen/
+# Temp icon source — actual icons live in src-tauri/icons/
+frontend/src-tauri/app-icon.png
 
 # Go — keep go.sum (it's a lockfile that must be committed)
 backend/*/vendor/
+# Compiled Go binaries
+backend/api/cs2-api.exe
+backend/**/*.exe
 
 # React / TypeScript
 build/
